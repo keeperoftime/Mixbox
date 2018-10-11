@@ -9,15 +9,15 @@ final class CrashTests: TestCase {
         XCUIApplication().terminate()
     }
     
-    func disabled_test_kill_9() {
+    func test_kill_9() {
         check(element: pageObjects.screen.kill_9)
     }
     
-    func disabled_test_div_0() {
+    func test_div_0() {
         check(element: pageObjects.screen.div_0)
     }
     
-    func disabled_test_exception() {
+    func test_exception() {
         check(element: pageObjects.screen.exception)
     }
     
