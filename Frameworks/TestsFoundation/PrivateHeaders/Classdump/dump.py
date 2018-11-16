@@ -177,7 +177,9 @@ class Dump:
     def dump(self, framework, xcode):
         framework_dir = os.path.join(xcode.path, framework)
         framework_basename = os.path.basename(framework_dir)
-        framework_name = re.sub(framework_basename, "\.framework$", "")
+        framework_name = re.sub("\.framework$", "", framework_basename)
+        
+        print(framework_name)
         destination_dir = f"{script_dir}/{framework_name}/{xcode.name}"
         
         if framework_basename == framework_name:
