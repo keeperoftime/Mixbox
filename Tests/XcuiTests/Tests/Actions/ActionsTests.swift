@@ -63,7 +63,10 @@ final class ActionsTests: TestCase {
     }
     
     func test_swipes() {
-        let numberOfSubsequentActions = 30
+        // TODO: Make it more stable!
+        // If there is a high load on current machine (5+ other tests are executed),
+        // this test fails.
+        // let numberOfSubsequentActions = 30
         for _ in 0..<numberOfSubsequentActions {
             screen.label("swipeUp").swipeUp()
             screen.info.assert.hasText("swipeUp")

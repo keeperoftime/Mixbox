@@ -39,10 +39,10 @@ installEmcee() {
 }
 
 testUsingEmcee() {
-    appName=Tests.app
-    testsTarget=XcuiTests
-    runnerAppName=$testsTarget-Runner.app
-    derivedDataPath=`derivedDataPath`
+    local appName=Tests.app
+    local testsTarget=XcuiTests
+    local runnerAppName=$testsTarget-Runner.app
+    local derivedDataPath=`derivedDataPath`
 
     mkdir -p "$MIXBOX_CI_REPORTS_PATH"
 
@@ -50,18 +50,73 @@ testUsingEmcee() {
 
     cd "$MIXBOX_CI_SCRIPT_DIRECTORY"
     
-    fbxctestUrl="http://artifactory.msk.avito.ru/artifactory/ios-ci/fb/fbxctest/fbxctest_20181120T145305.zip"
-    fbsimctlUrl="http://artifactory.msk.avito.ru/artifactory/ios-ci/fb/fbsimctl/fbsimctl_20181120T145356.zip"
+    local fbxctestUrl="http://artifactory.msk.avito.ru/artifactory/ios-ci/fb/fbxctest/fbxctest_20181120T145305.zip"
+    local fbsimctlUrl="http://artifactory.msk.avito.ru/artifactory/ios-ci/fb/fbsimctl/fbsimctl_20181120T145356.zip"
     
-    "$avitoRunnerBinaryPath" runTests \
+    local emceeAction=
+    local emceeArgs=()
+
+    local destinationFile="$(destinationFile)"
+    local xctestBundle="$derivedDataPath/Build/Products/Debug-iphonesimulator/$testsTarget-Runner.app/PlugIns/$testsTarget.xctest"
+    
+    if [ -z "$MIXBOX_CI_EMCEE_MACHINES_CONFIG_GETTER" ]
+    then
+        emceeAction=runTests
+        emceeArgs=("${emceeArgs[@]}" "--temp-folder" "$derivedDataPath")
+        emceeArgs=("${emceeArgs[@]}" "--number-of-simulators" "2")
+        emceeArgs=("${emceeArgs[@]}" "--schedule-strategy" "progressive")
+    else
+        local emceeMachines="$derivedDataPath/emcee_destinations.json"
+        
+        $MIXBOX_CI_EMCEE_MACHINES_CONFIG_GETTER > "$emceeMachines"
+
+        local runtimeDump="$derivedDataPath/runtime_dump.json"
+        
+        "$avitoRunnerBinaryPath" dump \
+                        --test-destinations "$destinationFile" \
+                        --fbxctest "$fbxctestUrl" \
+                        --xctest-bundle "$xctestBundle" \
+                        --output "$runtimeDump"
+        
+        # Make --test-args-file:
+        local testArgsFile="$derivedDataPath/test_args_file.json"
+        jq -s '{
+            entries: [
+                {
+                    runtimeDumpJson: .[0],
+                    destinationsJson: .[1][].testDestination
+                } |
+                {
+                    testToRun: .runtimeDumpJson[] | {c: .className, m: .testMethods[]} | join("/"),
+                    testDestination: {
+                        deviceType: .destinationsJson.deviceType,
+                        runtime: .destinationsJson.iOSVersion
+                    },
+                    numberOfRetries: 4
+                }
+            ]
+        }' "$runtimeDump" "$destinationFile" > "$testArgsFile";
+        
+        
+        emceeAction=distRunTests
+        emceeArgs=("${emceeArgs[@]}" "--destinations" "$emceeMachines")
+        emceeArgs=("${emceeArgs[@]}" "--remote-schedule-strategy" "progressive")
+        emceeArgs=("${emceeArgs[@]}" "--run-id" `uuidgen`)
+        emceeArgs=("${emceeArgs[@]}" "--number-of-simulators" "1")
+        emceeArgs=("${emceeArgs[@]}" "--schedule-strategy" "equally_divided")
+        emceeArgs=("${emceeArgs[@]}" "--test-args-file" "$testArgsFile")
+        
+        
+    fi
+    
+    "$avitoRunnerBinaryPath" "$emceeAction" \
     --fbsimctl "$fbsimctlUrl" \
     --fbxctest "$fbxctestUrl" \
     --junit "$MIXBOX_CI_REPORTS_PATH/junit.xml" \
     --trace "$MIXBOX_CI_REPORTS_PATH/trace.combined.json" \
     --environment "$MIXBOX_CI_SCRIPT_DIRECTORY/emcee/environment.json" \
-    --test-destinations "$(destinationFile)" \
-    --number-of-retries 1 \
-    --number-of-simulators 4 \
+    --test-destinations "$destinationFile" \
+    --number-of-retries 3 \
     --schedule-strategy "progressive" \
     --single-test-timeout 1200 \
     --fbxctest-bundle-ready-timeout 600 \
@@ -70,10 +125,10 @@ testUsingEmcee() {
     --fbxctest-regular-timeout 600 \
     --fbxctest-silence-timeout 600 \
     --fbxctest-slow-timeout 1200 \
-    --temp-folder "$derivedDataPath" \
     --runner "$derivedDataPath/Build/Products/Debug-iphonesimulator/$testsTarget-Runner.app" \
     --app "$derivedDataPath/Build/Products/Debug-iphonesimulator/$appName" \
-    --xctest-bundle "$derivedDataPath/Build/Products/Debug-iphonesimulator/$testsTarget-Runner.app/PlugIns/$testsTarget.xctest"
+    --xctest-bundle "$xctestBundle" \
+    "${emceeArgs[@]}"
 }
 
 prepareForTesting
